@@ -1,0 +1,229 @@
+# CROCO Benchmark Report
+
+*REGIONAL › BENGUELA_LR  ·  grid 60 × 40 × 32  ·  30 days per run  ·  2026-10-24 17:35*
+
+| | |
+|:---|:---|
+| **Configuration** | `cppdefs.h` block `REGIONAL`, case `BENGUELA_LR` |
+| **Grid (param.h)** | LLm × MMm × N = **60 × 40 × 32** (active branch `REGIONAL › BENGUELA_LR`, line 10) |
+| **Machine** | `vm`: Intel(R) Xeon(R) Processor @ 2.10GHz; 2 physical / 2 logical CPUs |
+| **Cores used** | 16 (CPU 0-15), up to 16 simultaneous runs |
+| **Run directory** | `/home/claude/mock/case` |
+| **Simulated period** | 30 days per run; original croco.in dt = 3600 s, NDTFAST = 60 (`fixed`) |
+
+## Key results
+
+| Result | Value | Detail |
+|:---|:---|:---|
+| Recommended dt | **1200 s** | 3600 / 3 steps per hour; largest stable 1790 s |
+| Recommended cores · MPI | **8 cores** | layout 4x2, E = 0.506 |
+| Recommended cores · OPENMP | **4 cores** | layout 1x4, E = 0.581 |
+| Fastest run | **MPI 12 cores** | 6 × 2, 1.5 s per 30 days |
+| Barotropic CFL at recommended dt | **0.567** | advective 0.414; first BLOW UP at 1800 s |
+| Serial reference T(1) | **7.4 s** | 1 core, no OpenMP/MPI, dt = 1200 s |
+
+- **Recommended time step: 1200 s** = 3600 / 3, the largest integer dt that divides 3600 without exceeding the largest stable dt. All times and efficiencies in this report were measured with it.
+- **Largest stable dt found:** 1790 s (NDTFAST = 60, barotropic dt = 29.83 s).
+- **Stability limit** between 1790 s (stable) and 1800 s (first BLOW UP).
+- **MPI:** up to **8 cores** (layout 4x2, efficiency 0.506 > 0.5).
+- **OPENMP:** up to **4 cores** (layout 1x4, efficiency 0.581 > 0.5).
+- **Fastest configuration:** MPI with 12 cores, layout 6 × 2 (NP_XI × NP_ETA), 1.5 s per 30 days (71760.8 simulated days per wall-clock hour), measured alone on the machine.
+
+## Time-step search (serial run)
+
+All runs of this stage use the serial build (1 core, `OPENMP` and `MPI` undefined). Starting from the reference dt (600 s), dt is doubled while the run is stable; after the first BLOW UP the next dt is the midpoint between the last stable dt and the last BLOW UP, and the search stops after two BLOW UPs in a row. Rules: a dt larger than one that blew up is never tested, and when going down the search never goes below a stable dt whose half is also stable.
+
+*Table 1. Decision sequence of the time-step search.*
+
+| Step | Phase | dt [s] | Result |
+|---:|:---|---:|:---|
+| 1 | up | 600 | stable |
+| 2 | up | 1200 | stable |
+| 3 | up | 2400 | BLOW UP |
+| 4 | bisect | 1800 | BLOW UP |
+| 5 | bisect | 1500 | stable |
+| 6 | bisect | 1650 | stable |
+| 7 | bisect | 1725 | stable |
+| 8 | bisect | 1762 | stable |
+| 9 | bisect | 1781 | stable |
+| 10 | bisect | 1790 | stable |
+
+*Table 2. Stability and Courant numbers for every dt tested (★ = recommended dt). Internal-wave CFL estimated with an assumed c₁ = 2.0 m/s.*
+
+| dt [s] | NDTFAST | dt_fast [s] | Status | CFL barotropic | CFL internal | CFL advective | Best time |
+|---:|---:|---:|:---|---:|---:|---:|---:|
+| 600 | 60 | 10.00 | OK | 0.284 | 0.768 | 0.207 | 14.6 s |
+| 1200 ★ | 60 | 20.00 | OK | 0.567 | 1.537 | 0.414 | 1.5 s |
+| 1500 | 60 | 25.00 | OK | 0.709 | 1.921 | 0.517 | 6.1 s |
+| 1650 | 60 | 27.50 | OK | 0.780 | 2.113 | 0.569 | 5.6 s |
+| 1725 | 60 | 28.75 | OK | 0.815 | 2.209 | 0.595 | 5.7 s |
+| 1762 | 60 | 29.37 | OK | 0.833 | 2.256 | 0.608 | 5.6 s |
+| 1781 | 60 | 29.68 | OK | 0.842 | 2.281 | 0.614 | 5.7 s |
+| 1790 | 60 | 29.83 | OK | 0.846 | 2.292 | 0.618 | 5.8 s |
+| 1800 | 60 | 30.00 | BLOWUP | 0.851 | 2.305 | 0.621 | – |
+| 2400 | 60 | 40.00 | BLOWUP | 1.134 | 3.074 | 0.828 | – |
+
+![Courant numbers versus time step; the dashed lines mark the largest stable dt and the first BLOW UP.](cfl_vs_dt.png)
+
+*Figure 1. Courant numbers versus time step; the dashed lines mark the largest stable dt and the first BLOW UP.*
+
+## Core-count exploration
+
+OpenMP and MPI start at 12 cores. For each core count every valid nx × ny decomposition is run and the fastest is kept. With E(n) = T(1) / (n · T(n)): if E > 0.5 the next test uses 2 more cores, otherwise 2 fewer; each mode stops when the direction reverses or the core limit is reached.
+
+*Table 3. OPENMP exploration path (stop: direction reversed at 4 cores).*
+
+| Cores | Best layout | Time | Efficiency E | Decision |
+|---:|:---:|---:|---:|:---|
+| 12 | 4x3 | 1.9 s | 0.329 | E ≤ 0.5 → −2 |
+| 10 | 5x2 | 2.0 s | 0.362 | E ≤ 0.5 → −2 |
+| 8 | 4x2 | 2.2 s | 0.421 | E ≤ 0.5 → −2 |
+| 6 | 2x3 | 2.5 s | 0.493 | E ≤ 0.5 → −2 |
+| 4 | 1x4 | 3.2 s | 0.581 | E > 0.5 → +2 |
+
+*Table 4. MPI exploration path (stop: direction reversed at 8 cores).*
+
+| Cores | Best layout | Time | Efficiency E | Decision |
+|---:|:---:|---:|---:|:---|
+| 12 | 6x2 | 1.5 s | 0.409 | E ≤ 0.5 → −2 |
+| 10 | 5x2 | 1.7 s | 0.444 | E ≤ 0.5 → −2 |
+| 8 | 4x2 | 1.8 s | 0.506 | E > 0.5 → +2 |
+
+![(a) run time versus dt, (b) scaling and (c) parallel efficiency at dt = 1200 s, (d) every layout tested.](benchmark_summary.png)
+
+*Figure 2. (a) run time versus dt, (b) scaling and (c) parallel efficiency at dt = 1200 s, (d) every layout tested.*
+
+## Efficiency study (NLHPC format)
+
+Format of the [NLHPC efficiency study](https://wiki.nlhpc.cl/Estudio_de_Eficiencia), at dt = 1200 s and 30 days simulated, with the best layout of each core count: **speed-up** S(n) = T(1) / T(n), **efficiency** E(n) = S(n) / n. T(1) is the serial run (1 core, built without OpenMP or MPI). Recommended: the largest core count with E > 0.5.
+
+*Table 5. MPI: recommended **8 cores**.*
+
+| No. of cores | 1 | 8 | 10 | 12 |
+|:---|---:|---:|---:|---:|
+| Layout | serial | 4x2 | 5x2 | 6x2 |
+| Time [s] | 7.38 | 1.82 | 1.66 | 1.50 |
+| Speed-up | 1.00 | 4.05 | 4.44 | 4.90 |
+| Efficiency | **1.00** | **0.51** | 0.44 | 0.41 |
+| Measured alone | yes | yes | yes | yes |
+
+*Table 6. OPENMP: recommended **4 cores**.*
+
+| No. of cores | 1 | 4 | 6 | 8 | 10 | 12 |
+|:---|---:|---:|---:|---:|---:|---:|
+| Layout | serial | 1x4 | 2x3 | 4x2 | 5x2 | 4x3 |
+| Time [s] | 7.38 | 3.18 | 2.49 | 2.19 | 2.04 | 1.87 |
+| Speed-up | 1.00 | 2.32 | 2.96 | 3.36 | 3.62 | 3.94 |
+| Efficiency | **1.00** | **0.58** | 0.49 | 0.42 | 0.36 | 0.33 |
+| Measured alone | yes | yes | yes | yes | yes | yes |
+
+![Speed-up (left, with the ideal line) and parallel efficiency (right, with the threshold); stars mark the recommended core count of each mode.](efficiency_study.png)
+
+*Figure 3. Speed-up (left, with the ideal line) and parallel efficiency (right, with the threshold); stars mark the recommended core count of each mode.*
+
+## All layouts at dt = 1200 s
+
+*Table 7. Every layout at dt = 1200 s, fastest first; speed-up and efficiency relative to the fastest run with 1 core(s).*
+
+| Mode | Cores | Layout | Time | Days/hour | Speed-up | Efficiency | Measured | Status |
+|:---|---:|:---:|---:|---:|---:|---:|:---|:---|
+| MPI | 12 | 6 × 2 | 1.5 s | 71760.8 | 4.90 | 41 % | alone | OK |
+| MPI | 12 | 3 × 4 | 1.5 s | 71475.8 | 4.88 | 41 % | alone | OK |
+| MPI | 12 | 4 × 3 | 1.5 s | 70404.2 | 4.81 | 40 % | alone | OK |
+| MPI | 12 | 2 × 6 | 1.6 s | 69053.7 | 4.72 | 39 % | alone | OK |
+| MPI | 12 | 12 × 1 | 1.6 s | 68746.0 | 4.70 | 39 % | alone | OK |
+| MPI | 10 | 5 × 2 | 1.7 s | 65021.1 | 4.44 | 44 % | alone | OK |
+| MPI | 10 | 2 × 5 | 1.7 s | 62500.0 | 4.27 | 43 % | alone | OK |
+| MPI | 10 | 10 × 1 | 1.8 s | 61503.4 | 4.20 | 42 % | alone | OK |
+| MPI | 10 | 1 × 10 | 1.8 s | 59536.9 | 4.07 | 41 % | alone | OK |
+| MPI | 8 | 4 × 2 | 1.8 s | 59275.5 | 4.05 | 51 % | alone | OK |
+| OPENMP | 12 | 4 × 3 | 1.9 s | 57692.3 | 3.94 | 33 % | alone | OK |
+| OPENMP | 12 | 3 × 4 | 1.9 s | 57142.9 | 3.91 | 33 % | alone | OK |
+| OPENMP | 12 | 6 × 2 | 1.9 s | 56367.4 | 3.85 | 32 % | alone | OK |
+| OPENMP | 12 | 2 × 6 | 1.9 s | 56220.7 | 3.84 | 32 % | alone | OK |
+| MPI | 8 | 2 × 4 | 1.9 s | 55698.8 | 3.81 | 48 % | alone | OK |
+| MPI | 8 | 8 × 1 | 1.9 s | 55527.0 | 3.79 | 47 % | alone | OK |
+| OPENMP | 12 | 12 × 1 | 1.9 s | 55498.5 | 3.79 | 32 % | alone | OK |
+| MPI | 8 | 1 × 8 | 1.9 s | 55498.5 | 3.79 | 47 % | alone | OK |
+| OPENMP | 10 | 5 × 2 | 2.0 s | 52941.2 | 3.62 | 36 % | alone | OK |
+| OPENMP | 10 | 1 × 10 | 2.1 s | 52427.2 | 3.58 | 36 % | alone | OK |
+| OPENMP | 10 | 10 × 1 | 2.1 s | 52350.9 | 3.58 | 36 % | alone | OK |
+| OPENMP | 10 | 2 × 5 | 2.1 s | 51502.1 | 3.52 | 35 % | alone | OK |
+| OPENMP | 8 | 4 × 2 | 2.2 s | 49225.2 | 3.36 | 42 % | alone | OK |
+| OPENMP | 8 | 8 × 1 | 2.2 s | 48474.0 | 3.31 | 41 % | alone | OK |
+| OPENMP | 8 | 1 × 8 | 2.2 s | 48214.3 | 3.30 | 41 % | alone | OK |
+| OPENMP | 8 | 2 × 4 | 2.3 s | 47893.6 | 3.27 | 41 % | alone | OK |
+| OPENMP | 6 | 2 × 3 | 2.5 s | 43303.9 | 2.96 | 49 % | alone | OK |
+| OPENMP | 6 | 6 × 1 | 2.5 s | 42738.4 | 2.92 | 49 % | alone | OK |
+| OPENMP | 6 | 3 × 2 | 2.6 s | 41844.2 | 2.86 | 48 % | alone | OK |
+| OPENMP | 6 | 1 × 6 | 2.6 s | 40909.1 | 2.80 | 47 % | alone | OK |
+| OPENMP | 4 | 1 × 4 | 3.2 s | 34005.0 | 2.32 | 58 % | alone | OK |
+| OPENMP | 4 | 2 × 2 | 3.2 s | 33845.2 | 2.31 | 58 % | alone | OK |
+| OPENMP | 4 | 4 × 1 | 3.2 s | 33374.5 | 2.28 | 57 % | alone | OK |
+| SERIAL | 1 | 1 × 1 | 7.4 s | 14632.2 | 1.00 | 100 % | alone | OK |
+
+## Run schedule
+
+![Which run used which cores and when (red edge = BLOW UP).](schedule.png)
+
+*Figure 4. Which run used which cores and when (red edge = BLOW UP).*
+
+## Methodology
+
+- Every run starts from the original `cppdefs.h`, `param.h` and `croco.in`. `cppdefs.h`: `OPENMP` or `MPI` switched inside the active configuration block (both undefined for the serial build); `param.h`: `NP_XI`/`NP_ETA` (MPI) or `NPP`/`NSUB_X`/`NSUB_E` (OpenMP); `croco.in`: `dt` and `NTIMES = ceil(30·86400/dt)`. Output periods are rescaled to stay constant in seconds.
+- Case and grid are not assumed: the preprocessor directives of `cppdefs.h` are evaluated and then used to find the `parameter (LLm0=…, MMm0=…, N=…)` line of `param.h` that is actually compiled.
+- One executable per layout, compiled before the runs that use it, several at a time in sibling directories of `run_dir`; changing dt does not recompile. Every run works in its own directory (`work/<run>`) with its own `croco.in`, inputs linked read-only, and is pinned to its own block of cores (`taskset`, `OMP_PLACES`).
+- Measured time: wall-clock time from launch to process end. BLOW UP is detected in the log (`BLOW UP` or `NaN`); the run is killed after a grace period and runs with a larger dt are cancelled.
+- CFL barotropic = dt_fast·√(g·h)·√(1/dx²+1/dy²) (maximum over wet points, dt_fast = dt/NDTFAST); CFL internal = dt·c₁·√(1/dx²+1/dy²) with an assumed c₁; CFL advective = dt·max(|u|/dx + |v|/dy) from the history file.
+- Stability over the simulated period does not guarantee stability under stronger forcing: for production, keep a margin (≈ 10–20 % below the largest stable dt).
+
+## Appendix: all runs
+
+*Table 8. Every run of the benchmark, in order.*
+
+| Stage | Mode | Cores | Layout | dt | Rep | CPUs | Concurrent | Status | Time [s] | Sim. days | Notes |
+|:---|:---|---:|:---:|---:|---:|:---|---:|:---|---:|---:|:---|
+| dt-search | serial | 1 | 1×1 | 600 | 0 | 0 | 0 | OK | 14.6 | 30.000 |  |
+| dt-search | serial | 1 | 1×1 | 1200 | 0 | 0 | 0 | OK | 7.4 | 30.000 |  |
+| dt-search | serial | 1 | 1×1 | 2400 | 0 | 0 | 0 | BLOWUP | 3.3 | 18.000 |  |
+| dt-search | serial | 1 | 1×1 | 1800 | 0 | 0 | 1 | BLOWUP | 4.1 | 18.000 |  |
+| dt-search | serial | 1 | 1×1 | 1500 | 0 | 1 | 1 | OK | 6.1 | 30.000 |  |
+| dt-search | serial | 1 | 1×1 | 1650 | 0 | 0 | 1 | OK | 5.6 | 30.002 |  |
+| dt-search | serial | 1 | 1×1 | 1725 | 0 | 0 | 1 | OK | 5.7 | 30.008 |  |
+| dt-search | serial | 1 | 1×1 | 1762 | 0 | 0 | 1 | OK | 5.6 | 30.019 |  |
+| dt-search | serial | 1 | 1×1 | 1781 | 0 | 0 | 1 | OK | 5.7 | 30.013 |  |
+| dt-search | serial | 1 | 1×1 | 1790 | 0 | 0 | 0 | OK | 5.8 | 30.020 |  |
+| explore | openmp | 12 | 2×6 | 1200 | 0 | 0-11 | 0 | OK | 1.9 | 30.000 |  |
+| explore | openmp | 12 | 3×4 | 1200 | 0 | 0-11 | 0 | OK | 1.9 | 30.000 |  |
+| explore | openmp | 12 | 4×3 | 1200 | 0 | 0-11 | 0 | OK | 1.9 | 30.000 |  |
+| explore | openmp | 12 | 6×2 | 1200 | 0 | 0-11 | 0 | OK | 1.9 | 30.000 |  |
+| explore | openmp | 12 | 12×1 | 1200 | 0 | 0-11 | 0 | OK | 1.9 | 30.000 |  |
+| explore | mpi | 12 | 2×6 | 1200 | 0 | 0-11 | 0 | OK | 1.6 | 30.000 |  |
+| explore | mpi | 12 | 3×4 | 1200 | 0 | 0-11 | 0 | OK | 1.5 | 30.000 |  |
+| explore | mpi | 12 | 4×3 | 1200 | 0 | 0-11 | 0 | OK | 1.5 | 30.000 |  |
+| explore | mpi | 12 | 6×2 | 1200 | 0 | 0-11 | 0 | OK | 1.5 | 30.000 |  |
+| explore | mpi | 12 | 12×1 | 1200 | 0 | 0-11 | 0 | OK | 1.6 | 30.000 |  |
+| explore | openmp | 10 | 1×10 | 1200 | 0 | 0-9 | 0 | OK | 2.1 | 30.000 |  |
+| explore | openmp | 10 | 2×5 | 1200 | 0 | 0-9 | 0 | OK | 2.1 | 30.000 |  |
+| explore | openmp | 10 | 5×2 | 1200 | 0 | 0-9 | 0 | OK | 2.0 | 30.000 |  |
+| explore | openmp | 10 | 10×1 | 1200 | 0 | 0-9 | 0 | OK | 2.1 | 30.000 |  |
+| explore | mpi | 10 | 1×10 | 1200 | 0 | 0-9 | 0 | OK | 1.8 | 30.000 |  |
+| explore | mpi | 10 | 2×5 | 1200 | 0 | 0-9 | 0 | OK | 1.7 | 30.000 |  |
+| explore | mpi | 10 | 5×2 | 1200 | 0 | 0-9 | 0 | OK | 1.7 | 30.000 |  |
+| explore | mpi | 10 | 10×1 | 1200 | 0 | 0-9 | 0 | OK | 1.8 | 30.000 |  |
+| explore | openmp | 8 | 1×8 | 1200 | 0 | 0-7 | 0 | OK | 2.2 | 30.000 |  |
+| explore | openmp | 8 | 2×4 | 1200 | 0 | 0-7 | 0 | OK | 2.3 | 30.000 |  |
+| explore | openmp | 8 | 4×2 | 1200 | 0 | 0-7 | 0 | OK | 2.2 | 30.000 |  |
+| explore | openmp | 8 | 8×1 | 1200 | 0 | 0-7 | 0 | OK | 2.2 | 30.000 |  |
+| explore | mpi | 8 | 1×8 | 1200 | 0 | 0-7 | 0 | OK | 1.9 | 30.000 |  |
+| explore | mpi | 8 | 2×4 | 1200 | 0 | 0-7 | 0 | OK | 1.9 | 30.000 |  |
+| explore | mpi | 8 | 4×2 | 1200 | 0 | 0-7 | 0 | OK | 1.8 | 30.000 |  |
+| explore | mpi | 8 | 8×1 | 1200 | 0 | 0-7 | 0 | OK | 1.9 | 30.000 |  |
+| explore | openmp | 6 | 1×6 | 1200 | 0 | 0-5 | 0 | OK | 2.6 | 30.000 |  |
+| explore | openmp | 6 | 2×3 | 1200 | 0 | 0-5 | 0 | OK | 2.5 | 30.000 |  |
+| explore | openmp | 6 | 3×2 | 1200 | 0 | 0-5 | 0 | OK | 2.6 | 30.000 |  |
+| explore | openmp | 6 | 6×1 | 1200 | 0 | 0-5 | 0 | OK | 2.5 | 30.000 |  |
+| explore | openmp | 4 | 1×4 | 1200 | 0 | 0-3 | 0 | OK | 3.2 | 30.000 |  |
+| explore | openmp | 4 | 2×2 | 1200 | 0 | 0-3 | 0 | OK | 3.2 | 30.000 |  |
+| explore | openmp | 4 | 4×1 | 1200 | 0 | 0-3 | 0 | OK | 3.2 | 30.000 |  |
+

@@ -1,0 +1,27 @@
+{
+  "_comment": "Example for one NLHPC node inside a Slurm job (see run_bench_nlhpc.bash). Paths relative to this file. Missing keys take the defaults in croco_bench.py.",
+  "run_dir": "Run_FJORD",
+  "compile_cmd": "./jobcomp",
+  "executable": "croco",
+  "modes": ["openmp", "mpi"],
+
+  "launcher": "slurm",
+  "slurm_step_flags": "--exact --cpu-bind=cores",
+  "walltime_margin_s": 900,
+
+  "ref_cores": 12,
+  "core_step": 2,
+  "efficiency_threshold": 0.5,
+  "build_jobs": 4,
+  "omp_tile_factors": [1],
+  "min_points_per_subdomain": 8,
+
+  "dt_ref": 300,
+  "sim_days": 1,
+  "repeat": 1,
+  "ndtfast_mode": "fixed",
+
+  "timeout_s": 21600,
+  "internal_wave_speed": 1.0,
+  "output_dir": "bench_results"
+}

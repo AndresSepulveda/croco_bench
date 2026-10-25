@@ -1,0 +1,35 @@
+{
+  "_comment": "Example for a workstation. Paths relative to this file. Missing keys take the defaults in croco_bench.py.",
+  "run_dir": "/home/user/CROCO/Run_FJORD",
+  "compile_cmd": "./jobcomp",
+  "executable": "croco",
+  "modes": [
+    "openmp",
+    "mpi"
+  ],
+  "max_cores": 16,
+  "ref_cores": 12,
+  "core_step": 2,
+  "reserve_cores": 1,
+  "use_hyperthreads": false,
+  "max_parallel_jobs": null,
+  "build_mode": "parallel",
+  "build_jobs": 4,
+  "omp_tile_factors": [
+    1,
+    2
+  ],
+  "min_points_per_subdomain": 8,
+  "dt_ref": 300,
+  "sim_days": 1,
+  "repeat": 1,
+  "ndtfast_mode": "fixed",
+  "run_cmd": {
+    "openmp": "taskset -c {cpus} {exe} {croco_in}",
+    "mpi": "taskset -c {cpus} mpirun --bind-to none -np {np} {exe} {croco_in}"
+  },
+  "timeout_s": 21600,
+  "internal_wave_speed": 1.0,
+  "output_dir": "bench_results",
+  "efficiency_threshold": 0.5
+}
